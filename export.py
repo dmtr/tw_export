@@ -33,7 +33,9 @@ def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET",
     consumer = oauth.Consumer(consumer_key, consumer_secret)
     client = oauth.Client(consumer, token)
     resp, content = client.request(url, method=http_method, body=post_body, headers=http_headers, force_auth_header=True)
-    check_response(url, resp)
+    logger.debug(u'Url %s, got response %s', url, resp)
+    if resp['status'] != '200':
+        raise Exception(u'Status is %s, url %s', resp['status'], url)
     return content
 
 
@@ -55,6 +57,7 @@ def export(consumer_key, consumer_secret, token=None):
     except Exception, e:
         logger.error(u'Got error %s', e)
     logger.info(u'Export is finished')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
