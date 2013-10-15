@@ -5,28 +5,11 @@ import argparse
 import sys
 import oauth2 as oauth
 import simplejson
-import urlparse
 
 
 LOG_FILENAME = 'tw_export.log'
 FORMAT = '%(name)s:%(levelname)s %(module)s:%(lineno)d:%(asctime)s  %(message)s'
 logger = logging.getLogger('tw_export')
-
-
-def check_response(url, resp):
-    logger.debug(u'Url %s, got response %s', url, resp)
-    if resp['status'] != '200':
-        raise Exception(u'Status is %s, url %s', resp['status'], url)
-
-
-def get_token(consumer_key, consumer_secret):
-    consumer = oauth.Consumer(consumer_key, consumer_secret)
-    request_token_url = "http://twitter.com/oauth/request_token"
-    client = oauth.Client(consumer)
-    resp, content = client.request(request_token_url, "GET")
-    check_response(request_token_url, resp)
-    c = dict(urlparse.parse_qsl(content))
-    return oauth.Token(c['oauth_token'], c['oauth_token_secret'])
 
 
 def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET", post_body=None, http_headers=None):
@@ -47,12 +30,13 @@ def save_timeline(timeline):
     json = simplejson.loads(timeline)
     for obj in json:
         pass
+        #print obj
 
 
 def export(consumer_key, consumer_secret, token=None):
     logger.info(u'Export is started')
     try:
-        t = home_timeline(consumer_key, consumer_secret, token or get_token(consumer_key, consumer_secret))
+        t = home_timeline(consumer_key, consumer_secret, token)
         save_timeline(t)
     except Exception, e:
         logger.error(u'Got error %s', e)
@@ -68,9 +52,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--consumer-secret", action="store", dest="consumer_secret", help=u"Secret")
 
-    parser.add_argument("--token", action="store", dest="token", default='', help=u"Token")
+    parser.add_argument("--token", action="store", dest="token", help=u"Token")
 
-    parser.add_argument("--token-secret", action="store", dest="token_secret", default='', help=u"Token secret")
+    parser.add_argument("--token-secret", action="store", dest="token_secret", help=u"Token secret")
 
     args = parser.parse_args()
 
