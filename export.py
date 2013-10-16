@@ -78,7 +78,7 @@ class Timeline(object):
         if not self._timeline:
             raise StopIteration
 
-        tw = self._timeline.pop()
+        tw = self._timeline.pop(0)
         self._max_id = tw['id'] - 1
         return tw
 
