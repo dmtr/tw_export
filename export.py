@@ -5,6 +5,7 @@ import argparse
 import sys
 import oauth2 as oauth
 import simplejson
+import urllib
 
 
 LOG_FILENAME = 'tw_export.log'
@@ -22,21 +23,25 @@ def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET",
     return content
 
 
-def home_timeline(key, secret, token):
-    return send_oauth_req('https://api.twitter.com/1.1/statuses/home_timeline.json', key, secret, token)
+def user_timeline(key, secret, token, timeline_options):
+    qs = urllib.urlencode(timeline_options)
+    url = 'https://api.twitter.com/1.1/statuses/user_timeline.json'
+    if qs:
+        url = '{0}?{1}'.format(url, qs)
+    return send_oauth_req(url, key, secret, token)
 
 
 def save_timeline(timeline):
     json = simplejson.loads(timeline)
     for obj in json:
         pass
-        #print obj
+        print obj
 
 
-def export(consumer_key, consumer_secret, token=None):
+def export(consumer_key, consumer_secret, token, timeline_options):
     logger.info(u'Export is started')
     try:
-        t = home_timeline(consumer_key, consumer_secret, token)
+        t = user_timeline(consumer_key, consumer_secret, token, timeline_options)
         save_timeline(t)
     except Exception, e:
         logger.error(u'Got error %s', e)
@@ -56,6 +61,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--token-secret", action="store", dest="token_secret", help=u"Token secret")
 
+    parser.add_argument("--count", action="store", dest="count", default=10, help=u"Count")
+
+    parser.add_argument("--max-id", action="store", dest="max_id", default=0, help=u"Max id")
+
+    parser.add_argument("--since-id", action="store", dest="since_id", default=0, help=u"Since id")
+
     args = parser.parse_args()
 
     logging.basicConfig(stream=sys.stdout, format=FORMAT, level=getattr(logging, args.loglevel))
@@ -65,5 +76,12 @@ if __name__ == "__main__":
     logger.setLevel(getattr(logging, args.loglevel))
     logger.addHandler(handler)
 
-    token = oauth.Token(key=args.token, secret=args.token_secret) if args.token and args.token_secret else None
-    export(args.consumer_key, args.consumer_secret, token)
+    token = oauth.Token(key=args.token, secret=args.token_secret)
+
+    timeline_options = dict()
+    for p in [('count', args.count), ('max_id', args.max_id), ('since_id', args.since_id)]:
+        k, v = p
+        if v:
+            timeline_options[k] = v
+
+    export(args.consumer_key, args.consumer_secret, token, timeline_options)
