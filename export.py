@@ -4,10 +4,13 @@ import logging.handlers
 import argparse
 import sys
 import oauth2 as oauth
+import os
 import simplejson
 import urllib
+from collections import namedtuple
 
 
+TimelineOptions = namedtuple('TimelineOptions', 'count max_id since_id trim_user')
 LOG_FILENAME = 'tw_export.log'
 FORMAT = '%(name)s:%(levelname)s %(module)s:%(lineno)d:%(asctime)s  %(message)s'
 logger = logging.getLogger('tw_export')
@@ -23,26 +26,84 @@ def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET",
     return content
 
 
-def user_timeline(key, secret, token, timeline_options):
-    qs = urllib.urlencode(timeline_options)
-    url = 'https://api.twitter.com/1.1/statuses/user_timeline.json'
-    if qs:
-        url = '{0}?{1}'.format(url, qs)
-    return send_oauth_req(url, key, secret, token)
+class Timeline(object):
+    """Iterator over timeline"""
+    def __init__(self, consumer_key, consumer_secret, token, timeline_options):
+        self._consumer_key = consumer_key
+        self._consumer_secret = consumer_secret
+        self._token = token
+        self._count = timeline_options.count
+        self._max_id = timeline_options.max_id
+        self._since_id = timeline_options.since_id
+        self._trim_user = timeline_options.trim_user
+        self._first_request = True
+        self._timeline = []
+
+    @property
+    def max_id(self):
+        return self._max_id
+
+    @property
+    def since_id(self):
+        return self._since_id
+
+    def __repr__(self):
+        return u'Timeline, max_id: {self.max_id}, since_id: {self.since_id}'.format(self=self)
+
+    def _prepare_options(self):
+        o = dict()
+        if self._max_id:
+            o['max_id'] = self._max_id
+        if self._since_id and self._first_request:
+            o['since_id'] = self._since_id
+        o['count'] = self._count
+        o['trim_user'] = self._trim_user
+        return o
+
+    def _get_user_timeline(self):
+        qs = urllib.urlencode(self._prepare_options())
+        url = 'https://api.twitter.com/1.1/statuses/user_timeline.json'
+        if qs:
+            url = '{0}?{1}'.format(url, qs)
+        res = send_oauth_req(url, self._consumer_key, self._consumer_secret, self._token)
+        return simplejson.loads(res)
+
+    def next(self):
+        if not self._timeline:
+            self._timeline = self._get_user_timeline()
+            if self._first_request:
+                self._since_id = self._timeline[0]['id'] if self._timeline else 0
+                self._first_request = False
+
+        if not self._timeline:
+            raise StopIteration
+
+        tw = self._timeline.pop()
+        self._max_id = tw['id'] - 1
+        return tw
+
+    def __iter__(self):
+        return self
 
 
-def save_timeline(timeline):
-    json = simplejson.loads(timeline)
-    for obj in json:
-        pass
-        print obj
+class TweetToFile(object):
+    """Save tweets to disk"""
+    def __init__(self, root='./'):
+        self._root = root
+
+    def __call__(self, tweet):
+        with open(os.path.join(self._root, tweet['id_str']), 'w') as f:
+            text = tweet['text']
+            f.write(text.encode('utf8'))
 
 
-def export(consumer_key, consumer_secret, token, timeline_options):
+def export(consumer_key, consumer_secret, token, timeline_options, save_timeline=TweetToFile()):
     logger.info(u'Export is started')
     try:
-        t = user_timeline(consumer_key, consumer_secret, token, timeline_options)
-        save_timeline(t)
+        timeline = Timeline(consumer_key, consumer_secret, token, timeline_options)
+        for t in timeline:
+            logger.debug(u'Got tweet %s from timeline %s', t, timeline)
+            save_timeline(t)
     except Exception, e:
         logger.error(u'Got error %s', e)
     logger.info(u'Export is finished')
@@ -67,6 +128,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--since-id", action="store", dest="since_id", default=0, help=u"Since id")
 
+    parser.add_argument("--trim-user", action="store", dest="trim_user", default=True, help=u"Trim user info")
+
     args = parser.parse_args()
 
     logging.basicConfig(stream=sys.stdout, format=FORMAT, level=getattr(logging, args.loglevel))
@@ -77,11 +140,5 @@ if __name__ == "__main__":
     logger.addHandler(handler)
 
     token = oauth.Token(key=args.token, secret=args.token_secret)
-
-    timeline_options = dict()
-    for p in [('count', args.count), ('max_id', args.max_id), ('since_id', args.since_id)]:
-        k, v = p
-        if v:
-            timeline_options[k] = v
-
+    timeline_options = TimelineOptions(args.count, args.max_id, args.since_id, args.trim_user)
     export(args.consumer_key, args.consumer_secret, token, timeline_options)
