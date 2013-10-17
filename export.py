@@ -22,7 +22,7 @@ def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET",
     resp, content = client.request(url, method=http_method, body=post_body, headers=http_headers, force_auth_header=True)
     logger.debug(u'Url %s, got response %s', url, resp)
     if resp['status'] != '200':
-        raise Exception(u'Status is %s, url %s', resp['status'], url)
+        raise Exception(u'Status is {0}, url {1}'.format(resp['status'], url))
     return content
 
 
