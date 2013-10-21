@@ -38,6 +38,7 @@ class Timeline(object):
         self._trim_user = timeline_options.trim_user
         self._first_request = True
         self._timeline = []
+        self._export_all = not (timeline_options.max_id or timeline_options.since_id)
 
     @property
     def max_id(self):
@@ -69,11 +70,12 @@ class Timeline(object):
         return simplejson.loads(res)
 
     def next(self):
-        if not self._timeline:
+        if self._first_request:
             self._timeline = self._get_user_timeline()
-            if self._first_request:
-                self._since_id = self._timeline[0]['id'] if self._timeline else 0
-                self._first_request = False
+            self._since_id = self._timeline[0]['id'] if self._timeline else 0
+            self._first_request = False
+        elif not self._timeline and self._export_all:
+            self._timeline = self._get_user_timeline()
 
         if not self._timeline:
             raise StopIteration
