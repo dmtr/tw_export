@@ -3,11 +3,12 @@ import logging
 import logging.handlers
 import argparse
 import sys
-import oauth2 as oauth
 import os
 import simplejson
+import time
 import urllib
 from collections import namedtuple
+import oauth2 as oauth
 
 
 TimelineOptions = namedtuple('TimelineOptions', 'count max_id since_id trim_user')
@@ -19,16 +20,12 @@ logger = logging.getLogger('tw_export')
 def send_oauth_req(url, consumer_key, consumer_secret, token, http_method="GET", post_body=None, http_headers=None):
     consumer = oauth.Consumer(consumer_key, consumer_secret)
     client = oauth.Client(consumer, token)
-    resp, content = client.request(url, method=http_method, body=post_body, headers=http_headers, force_auth_header=True)
-    logger.debug(u'Url %s, got response %s', url, resp)
-    if resp['status'] != '200':
-        raise Exception(u'Status is {0}, url {1}'.format(resp['status'], url))
-    return content
+    return client.request(url, method=http_method, body=post_body, headers=http_headers, force_auth_header=True)
 
 
 class Timeline(object):
     """Iterator over timeline"""
-    def __init__(self, consumer_key, consumer_secret, token, timeline_options):
+    def __init__(self, consumer_key, consumer_secret, token, timeline_options, delay_func=time.sleep):
         self._consumer_key = consumer_key
         self._consumer_secret = consumer_secret
         self._token = token
@@ -39,6 +36,8 @@ class Timeline(object):
         self._first_request = True
         self._timeline = []
         self._export_all = not (timeline_options.max_id or timeline_options.since_id)
+        self._delay = 0
+        self._delay_func = delay_func
 
     @property
     def max_id(self):
@@ -61,13 +60,29 @@ class Timeline(object):
         o['trim_user'] = self._trim_user
         return o
 
+    def _check_response(self, resp):
+        if resp['status'] not in ('200', '429'):
+            raise Exception(u'Status is {0}'.format(resp['status']))
+
+        remaining = int(resp['x-rate-limit-remaining'])
+        if remaining == 0:
+            reset = int(resp['x-rate-limit-reset'])
+            self._delay = reset - int(time.time())
+
     def _get_user_timeline(self):
+        if self._delay:
+            logger.debug(u'Waiting %s secs', self._delay)
+            self._delay_func(self._delay)
+            self._delay = 0
+
         qs = urllib.urlencode(self._prepare_options())
         url = 'https://api.twitter.com/1.1/statuses/user_timeline.json'
         if qs:
             url = '{0}?{1}'.format(url, qs)
-        res = send_oauth_req(url, self._consumer_key, self._consumer_secret, self._token)
-        return simplejson.loads(res)
+        resp, content = send_oauth_req(url, self._consumer_key, self._consumer_secret, self._token)
+        logger.debug(u'Url %s, got response %s', url, resp)
+        self._check_response(resp)
+        return simplejson.loads(content)
 
     def next(self):
         if self._first_request:
