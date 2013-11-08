@@ -108,6 +108,7 @@ def prepare_tweet(tweet):
         res = dict()
         res['text'] = tweet['text']
         res['created_at'] = tweet['created_at']
+        res['id_str'] = tweet['id_str']
         get_url = lambda a: a.get('expanded_url')
         res['media'] = map(get_url, tweet['entities'].get('media', []))
         res['urls'] = map(get_url, tweet['entities'].get('urls', []))
@@ -118,14 +119,15 @@ def prepare_tweet(tweet):
 
 class TweetToFile(object):
     """Save tweets to disk"""
-    def __init__(self, root='./'):
+    def __init__(self, root='./', prepare_tweet=prepare_tweet):
         if not os.path.isdir(root):
             os.mkdir(root)
         self._root = root
+        self._prepare_tweet = prepare_tweet
 
     def __call__(self, tweet):
-        with open(os.path.join(self._root, tweet['id_str']), 'w') as f:
-            tw = prepare_tweet(tweet)
+        with open(os.path.join(self._root, '{0}.json'.format(tweet['id_str'])), 'w') as f:
+            tw = self._prepare_tweet(tweet)
             if tw:
                 simplejson.dump(tw, f)
 
