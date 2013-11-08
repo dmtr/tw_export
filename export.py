@@ -119,6 +119,8 @@ def prepare_tweet(tweet):
 class TweetToFile(object):
     """Save tweets to disk"""
     def __init__(self, root='./'):
+        if not os.path.isdir(root):
+            os.mkdir(root)
         self._root = root
 
     def __call__(self, tweet):
@@ -128,7 +130,7 @@ class TweetToFile(object):
                 simplejson.dump(tw, f)
 
 
-def export(consumer_key, consumer_secret, token, timeline_options, save_timeline=TweetToFile()):
+def export(consumer_key, consumer_secret, token, timeline_options, save_timeline):
     logger.info(u'Export is started')
     try:
         timeline = Timeline(consumer_key, consumer_secret, token, timeline_options)
@@ -161,6 +163,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--trim-user", action="store", dest="trim_user", default=True, help=u"Trim user info")
 
+    parser.add_argument("--dir", action="store", dest="dir", default='./', help=u"Path to directory")
+
     args = parser.parse_args()
 
     logging.basicConfig(stream=sys.stdout, format=FORMAT, level=getattr(logging, args.loglevel))
@@ -172,4 +176,4 @@ if __name__ == "__main__":
 
     token = oauth.Token(key=args.token, secret=args.token_secret)
     timeline_options = TimelineOptions(args.count, args.max_id, args.since_id, args.trim_user)
-    export(args.consumer_key, args.consumer_secret, token, timeline_options)
+    export(args.consumer_key, args.consumer_secret, token, timeline_options, TweetToFile(args.dir))
