@@ -103,6 +103,19 @@ class Timeline(object):
         return self
 
 
+def prepare_tweet(tweet):
+    try:
+        res = dict()
+        res['text'] = tweet['text']
+        res['created_at'] = tweet['created_at']
+        get_url = lambda a: a.get('expanded_url')
+        res['media'] = map(get_url, tweet['entities'].get('media', []))
+        res['urls'] = map(get_url, tweet['entities'].get('urls', []))
+        return res
+    except KeyError, e:
+        logger.error(u'Key not found %s', e)
+
+
 class TweetToFile(object):
     """Save tweets to disk"""
     def __init__(self, root='./'):
@@ -110,8 +123,9 @@ class TweetToFile(object):
 
     def __call__(self, tweet):
         with open(os.path.join(self._root, tweet['id_str']), 'w') as f:
-            text = tweet['text']
-            f.write(text.encode('utf8'))
+            tw = prepare_tweet(tweet)
+            if tw:
+                simplejson.dump(tw, f)
 
 
 def export(consumer_key, consumer_secret, token, timeline_options, save_timeline=TweetToFile()):
