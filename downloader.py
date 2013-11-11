@@ -34,6 +34,9 @@ def get_page(url, content_type, timeout=20):
 
 class ContentToFile(object):
     """Save page to file"""
+
+    root = './'
+
     def __init__(self, url, content_type, id_str):
         self._url = url
         self._content_type = content_type
@@ -41,13 +44,17 @@ class ContentToFile(object):
 
     @property
     def filename(self):
-        return './{0}_{1}'.format(self._id_str, base64.urlsafe_b64encode(self._url))
+        return os.path.join(ContentToFile.root, './{0}_{1}'.format(self._id_str, base64.urlsafe_b64encode(self._url)))
 
     def __call__(self):
         content = get_page(self._url, self._content_type)
         logger.debug(u'Got page %s', self._url)
-        with open(self.filename, 'w') as f:
-            f.write(content.encode('utf8'))
+        if self._content_type == HTML:
+            with open(self.filename, 'w') as f:
+                f.write(content.encode('utf8'))
+        elif self._content_type == IMAGE:
+            with open(self.filename, 'wb') as f:
+                f.write(content)
 
 
 def download(urls, max_process):
@@ -111,4 +118,5 @@ if __name__ == "__main__":
     logger.addHandler(handler)
 
     urls = get_urls_from_files(args.dir)
+    ContentToFile.root = args.dir
     download(urls, args.max_process)
