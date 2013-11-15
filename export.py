@@ -6,6 +6,9 @@ import sys
 import os
 import simplejson
 import oauth2 as oauth
+from evernote.api.client import EvernoteClient
+from evernote.edam.type import ttypes
+from evernote.edam.error import ttypes as Errors
 from timeline import Timeline
 from timeline import TimelineOptions
 
@@ -44,6 +47,40 @@ class TweetToFile(object):
                 simplejson.dump(tw, f)
 
 
+class TweetToEvernote(object):
+    """Save tweets to Evernote"""
+    def __init__(self, ev_token, notebook_name='My tweets'):
+        self._token = ev_token
+        client = EvernoteClient(token=ev_token)
+        self._note_store = client.get_note_store()
+        self._notebook = self._create_notebook(notebook_name)
+
+    def _create_notebook(self, notebook_name):
+        notebook = ttypes.Notebook()
+        notebook.name = notebook_name
+        return self._note_store.createNotebook(notebook)
+
+    def make_note(self, note_title, note_body):
+        body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        body += "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">"
+        body += "<en-note>%s</en-note>" % note_body
+
+        note = ttypes.Note()
+        note.title = note_title
+        note.content = body
+        note.notebookGuid = self._notebook.guid
+
+        try:
+            note = self._note_store.createNote(self._token, note)
+        except Errors.EDAMUserException, e:
+            logger.exception(u'Got error %s', e)
+        except Errors.EDAMNotFoundException, e:
+            logger.exception(u'Got error %s', e)
+
+    def __call__(self, tweet):
+        self.make_note(tweet['id_str'], tweet['text'])
+
+
 def export(consumer_key, consumer_secret, token, timeline_options, save_timeline):
     logger.info(u'Export is started')
     try:
@@ -59,15 +96,21 @@ def export(consumer_key, consumer_secret, token, timeline_options, save_timeline
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--loglevel", action="store", dest="loglevel", default='DEBUG', choices=['DEBUG', 'INFO', 'WARNINGS', 'ERROR'], help=u"Уровень логгирования скрипта")
+    parser.add_argument("--loglevel", action="store", dest="loglevel", default='DEBUG', choices=['DEBUG', 'INFO', 'WARNINGS', 'ERROR'], help=u"Log level")
 
-    parser.add_argument("--consumer-key", action="store", dest="consumer_key", help=u"Key")
+    parser.add_argument("--destination", action="store", dest="dest", default='disk', choices=['disk', 'Evernote'], help=u"Where save tweets")
 
-    parser.add_argument("--consumer-secret", action="store", dest="consumer_secret", help=u"Secret")
+    tw_group = parser.add_argument_group('Twitter options')
 
-    parser.add_argument("--token", action="store", dest="token", help=u"Token")
+    tw_group.add_argument("--tw-consumer-key", action="store", dest="tw_consumer_key", required=True, help=u"Twitter consumer Key")
 
-    parser.add_argument("--token-secret", action="store", dest="token_secret", help=u"Token secret")
+    tw_group.add_argument("--tw-consumer-secret", action="store", dest="tw_consumer_secret", required=True, help=u"Twitter consumer secret")
+
+    tw_group.add_argument("--tw-token", action="store", dest="tw_token", required=True, help=u"Twitter token")
+
+    tw_group.add_argument("--tw-token-secret", action="store", dest="tw_token_secret", required=True, help=u"Twitter token secret")
+
+    parser.add_argument("--ev-token", action="store", dest="ev_token", help=u"Evernote developer token")
 
     parser.add_argument("--count", action="store", dest="count", default=10, help=u"Count")
 
@@ -88,6 +131,10 @@ if __name__ == "__main__":
     logger.setLevel(getattr(logging, args.loglevel))
     logger.addHandler(handler)
 
-    token = oauth.Token(key=args.token, secret=args.token_secret)
+    token = oauth.Token(key=args.tw_token, secret=args.tw_token_secret)
     timeline_options = TimelineOptions(args.count, args.max_id, args.since_id, args.trim_user)
-    export(args.consumer_key, args.consumer_secret, token, timeline_options, TweetToFile(args.dir))
+
+    if args.dest == 'disk':
+        export(args.tw_consumer_key, args.tw_consumer_secret, token, timeline_options, TweetToFile(args.dir))
+    elif args.dest == 'Evernote':
+        export(args.tw_consumer_key, args.tw_consumer_secret, token, timeline_options, TweetToEvernote(args.ev_token))
