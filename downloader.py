@@ -57,7 +57,7 @@ class ContentToFile(object):
                 f.write(content)
 
 
-def download(urls, max_process):
+def download(urls, max_process, save_page=ContentToFile):
     """download web pages
        urls - iterable
     """
@@ -65,14 +65,14 @@ def download(urls, max_process):
     if max_process:
         pool = multiprocessing.Pool(max_process)
         for url in urls:
-            pool.apply_async(ContentToFile(*url))
+            pool.apply_async(save_page(*url))
 
         logger.info(u'Waiting')
         pool.close()
         pool.join()
     else:
         for url in urls:
-            apply(ContentToFile(*url))
+            apply(save_page(*url))
 
 
 def get_urls_from_files(root):
