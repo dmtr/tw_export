@@ -12,7 +12,6 @@ from evernote.edam.error import ttypes as Errors
 from timeline import Timeline
 from timeline import TimelineOptions
 
-
 LOG_FILENAME = 'tw_export.log'
 FORMAT = '%(name)s:%(levelname)s %(module)s:%(lineno)d:%(asctime)s  %(message)s'
 logger = logging.getLogger('tw_export')
@@ -51,15 +50,19 @@ class TweetToEvernote(object):
     """Save tweets to Evernote"""
     def __init__(self, ev_token, notebook_name='My tweets'):
         self._token = ev_token
-        client = EvernoteClient(token=ev_token)
+        client = EvernoteClient(token=ev_token, sandbox=True)
         self._note_store = client.get_note_store()
         self._notebook = self._create_notebook(notebook_name)
 
     def _create_notebook(self, notebook_name):
+        notebooks = self._note_store.listNotebooks(self._token)
+        for n in notebooks:
+            if n.name == notebook_name:
+                return n
         notebook = ttypes.Notebook()
         notebook.name = notebook_name
         return self._note_store.createNotebook(notebook)
-
+        
     def make_note(self, note_title, note_body):
         body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         body += "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">"
@@ -78,7 +81,7 @@ class TweetToEvernote(object):
             logger.exception(u'Got error %s', e)
 
     def __call__(self, tweet):
-        self.make_note(tweet['id_str'], tweet['text'])
+        self.make_note(tweet['id_str'], tweet['text'].encode('utf8'))
 
 
 def export(consumer_key, consumer_secret, token, timeline_options, save_timeline):
